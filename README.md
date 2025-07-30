@@ -13,7 +13,9 @@ Not a product, just sharing what works for me. Your mileage may vary.
 - Keeps MCP server configs synced across all my AI tools
 - Manages my personal agent library 
 - Handles environment variables and API keys safely
+- Syncs base system prompts across all AI assistants
 - One command to sync everything when I add new tools
+- Provides MCP server so any AI assistant can manage the system
 
 ## My Setup
 
@@ -37,24 +39,34 @@ pip3 install -r requirements.txt
 
 # Set up environment variables
 cp env/.env.template env/.env
-vim env/.env  # Add your API keys
+vim env/.env  # Add your API keys and base prompt path
+
+# Set up base prompt (optional)
+cp prompts/base-prompt.md.example prompts/base-prompt.md
+vim prompts/base-prompt.md  # Customize your base prompt
 
 # Initialize the system
 ./scripts/init.sh
 
 # Test sync
 ./scripts/sync.sh
+
+# Build and test MCP server
+cd mcp-server && npm install && npm run build
 ```
 
 ## Directory Structure
 
 ```
 truffaldino/
-├── configs/          # My master config + tool-specific generation
-├── sync/             # Scripts to keep everything in sync
-├── agents/           # Symlinks to my agent libraries
+├── configs/          # Master config + tool-specific generation
+├── sync/             # Configuration sync tools
+├── agents/           # Agent library management
 ├── env/              # Environment variable templates
-└── scripts/          # Setup and maintenance scripts
+├── prompts/          # Base prompt templates
+├── scripts/          # All management scripts
+├── mcp-server/       # Truffaldino MCP server
+└── versions/         # Automatic backups (in ~/.truffaldino/)
 ```
 
 ## Personal Configuration
@@ -78,8 +90,9 @@ If you prefer to start from scratch:
 
 1. Copy example config: `cp configs/master-config.yaml.example configs/master-config.yaml`
 2. Edit with your MCP servers, paths, etc.
-3. Set up environment variables in `env/.env`
-4. Run `./scripts/init.sh` and `./scripts/sync.sh`
+3. Set up environment variables in `env/.env` (including BASE_PROMPT path)
+4. Set up base prompt: `cp prompts/base-prompt.md.example prompts/base-prompt.md`
+5. Run `./scripts/init.sh` and `./scripts/sync.sh`
 
 ## Sharing Your Setup
 
@@ -165,6 +178,69 @@ RCS-style versioning for all configuration files:
 # Clean up old versions
 ./scripts/manage-versions.sh cleanup 30
 ```
+
+### Prompt Management
+Sync your base prompt across all AI tools:
+
+```bash
+# Sync base prompt to all detected AI tools
+./scripts/sync-prompts.py
+
+# Sync to specific tools only
+./scripts/sync-prompts.py --tools claude_code cline cursor
+
+# Dry run (show what would be done)
+./scripts/sync-prompts.py --dry-run
+
+# List available tools
+./scripts/sync-prompts.py --list
+```
+
+### Master Management Tool
+Unified interface for all Truffaldino operations:
+
+```bash
+# Show system status
+./scripts/truffaldino.py status
+
+# Interactive mode
+./scripts/truffaldino.py --interactive
+
+# Run any command through the master tool
+./scripts/truffaldino.py sync
+./scripts/truffaldino.py import
+./scripts/truffaldino.py sync-prompts
+```
+
+### MCP Server Integration
+The Truffaldino MCP server lets any AI assistant manage your configuration:
+
+```bash
+# Build the MCP server
+cd mcp-server
+npm install
+npm run build
+
+# Add to your master-config.yaml:
+# truffaldino:
+#   command: node
+#   args: ["mcp-server/dist/index.js"]
+#   cwd: "/path/to/your/truffaldino"
+#   description: "Truffaldino configuration management"
+
+# Then sync to make it available to all AI tools
+./scripts/sync.sh
+```
+
+Available MCP tools:
+- `truffaldino_status` - Show system status
+- `truffaldino_sync` - Sync all configurations  
+- `truffaldino_import` - Smart import from detected tools
+- `truffaldino_sync_prompts` - Sync base prompt to all tools
+- `truffaldino_list_versions` - List configuration backups
+- `truffaldino_restore_version` - Restore previous version
+- `truffaldino_install_automation` - Set up auto-sync
+- `truffaldino_help` - Show detailed help
 
 ## Why I Built This
 

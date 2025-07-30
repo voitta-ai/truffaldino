@@ -11,6 +11,14 @@ mcp_servers:
       - "/path/to/your/workspace"  # Change this to your workspace
     description: "Provides filesystem access"
     
+  # Truffaldino MCP server (provides access to Truffaldino tools)
+  truffaldino:
+    command: node
+    args:
+      - "mcp-server/dist/index.js"
+    cwd: "/path/to/your/truffaldino"  # Change this to your Truffaldino installation
+    description: "Truffaldino configuration management tools"
+  
   # Example: Your custom MCP server
   # my-server:
   #   command: python

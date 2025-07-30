@@ -2,6 +2,9 @@
 .env
 configs/master-config.yaml
 
+# Personal prompts (contain user-specific content)
+prompts/base-prompt.md
+
 # Generated configs (can be recreated)
 configs/generated/
 
@@ -12,6 +15,11 @@ backups/
 logs/
 *.log
 
+# MCP server build artifacts
+mcp-server/dist/
+mcp-server/node_modules/
+mcp-server/*.tsbuildinfo
+
 # OS files
 .DS_Store
 Thumbs.db
@@ -20,3 +28,6 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# Version control files
+.truffaldino/

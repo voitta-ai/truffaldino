@@ -1,0 +1,22 @@
+# Personal configuration (secrets)
+.env
+configs/master-config.yaml
+
+# Generated configs (can be recreated)
+configs/generated/
+
+# Backups
+backups/
+
+# Logs
+logs/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~

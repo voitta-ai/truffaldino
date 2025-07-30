@@ -1,0 +1,67 @@
+# Master Configuration Template
+# Copy this to master-config.yaml and customize for your setup
+
+mcp_servers:
+  # Example: Filesystem access
+  filesystem:
+    command: npx
+    args:
+      - -y
+      - "@modelcontextprotocol/server-filesystem"
+      - "/path/to/your/workspace"  # Change this to your workspace
+    description: "Provides filesystem access"
+    
+  # Example: Your custom MCP server
+  # my-server:
+  #   command: python
+  #   args:
+  #     - "/path/to/your/server.py"
+  #   env:
+  #     MY_API_KEY: "${MY_API_KEY}"
+  #   cwd: "/path/to/server/directory"
+  #   description: "My custom MCP server"
+
+# Agent library configuration
+agents:
+  source_directory: "/path/to/your/agents"  # Change this
+  deployment_targets:
+    claude_code: "~/.claude/agents"
+    # Add other targets you use
+  
+  # Categories you use (customize as needed)
+  categories:
+    - engineering
+    - design
+    - personal
+    # Add your categories
+
+# Environment variables you need
+environment_variables:
+  required:
+    - YOUR_API_KEY
+    - ANOTHER_API_KEY
+  optional:
+    - DEBUG
+    - LOG_LEVEL
+
+# Tool paths (update for your system)
+tools:
+  claude_desktop:
+    config_path: "~/Library/Application Support/Claude/claude_desktop_config.json"  # macOS
+    # config_path: "~/.config/claude/config.json"  # Linux
+    supports_env: true
+    
+  claude_code:
+    config_command: "claude mcp"
+    supports_env: false
+    
+  # Add other tools you use
+  # cline:
+  #   config_path: "~/.cline/mcp_settings.json"
+  #   supports_env: true
+
+# Sync preferences
+sync:
+  auto_sync: true
+  conflict_resolution: "prompt"  # prompt, master_wins, local_wins
+  backup_on_sync: true

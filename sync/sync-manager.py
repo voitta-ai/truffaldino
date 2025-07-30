@@ -11,6 +11,7 @@ import shutil
 from pathlib import Path
 from typing import Dict, Any, Optional
 import argparse
+from dotenv import load_dotenv
 
 class SyncManager:
     def __init__(self, project_root: Path):
@@ -149,12 +150,7 @@ def main():
     # Load environment variables from .env if it exists
     env_file = project_root / "env" / ".env"
     if env_file.exists():
-        with open(env_file) as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, value = line.split("=", 1)
-                    os.environ[key] = value
+        load_dotenv(env_file)
     
     sync_manager = SyncManager(project_root)
     sync_manager.sync_all()

@@ -17,9 +17,13 @@ if ! command -v python3 &> /dev/null; then
 fi
 
 # Install Python dependencies if needed
-if ! python3 -c "import yaml" 2>/dev/null; then
+if ! python3 -c "import yaml, dotenv" 2>/dev/null; then
     echo "📦 Installing required Python packages..."
-    pip3 install --user pyyaml
+    if [ -f "$PROJECT_ROOT/requirements.txt" ]; then
+        pip3 install --user -r "$PROJECT_ROOT/requirements.txt"
+    else
+        pip3 install --user pyyaml python-dotenv
+    fi
 fi
 
 # Load environment variables

@@ -21,8 +21,8 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Find the project root (go up from mcp-server/dist to project root)
-const PROJECT_ROOT = join(__dirname, "..", "..", "..");
+// Find the project root (go up from mcp-server/dist or mcp-server/src to project root)
+const PROJECT_ROOT = join(__dirname, "..", "..");
 const SCRIPTS_DIR = join(PROJECT_ROOT, "scripts");
 
 interface TruffaldinoTool {

@@ -411,29 +411,27 @@ def main():
     
     print(f"\n✅ Superset configuration saved to: {target_file}")
     
-    # Update master-config.yaml
-    print("\n🔄 Updating master-config.yaml...")
-    master_config = detector.convert_claude_config_to_master(final_config)
+    # Save primary config location
+    primary_config = project_root / "configs" / "truffaldino.json"
+    primary_config.parent.mkdir(parents=True, exist_ok=True)
     
-    import yaml
-    master_yaml_path = project_root / "configs" / "master-config.yaml"
-    if master_yaml_path.exists():
-        backup_path = detector.version_file(master_yaml_path)
+    if primary_config.exists():
+        backup_path = detector.version_file(primary_config)
         print(f"  • Backed up to: {backup_path}")
     
-    with open(master_yaml_path, 'w') as f:
-        yaml.dump(master_config, f, default_flow_style=False, indent=2, sort_keys=False)
+    with open(primary_config, 'w') as f:
+        json.dump(final_config, f, indent=2, sort_keys=True)
     
-    print(f"✅ Master config updated: {master_yaml_path}")
+    print(f"✅ Primary config saved: {primary_config}")
     
     # Cleanup
     tmp_path.unlink()
     
     print("\n🎉 Import complete!")
     print("\nNext steps:")
-    print("1. Review configs/master-config.yaml")
+    print("1. Review configs/truffaldino.json")
     print("2. Update env/.env with any new API keys")
-    print("3. Run ./scripts/sync.sh to propagate changes")
+    print("3. Run ./scripts/sync.sh to sync to other tools")
     
     return 0
 

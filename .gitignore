@@ -1,6 +1,6 @@
 # Personal configuration (secrets)
 .env
-configs/master-config.yaml
+configs/truffaldino.json
 
 # Personal prompts (contain user-specific content)
 prompts/base-prompt.md

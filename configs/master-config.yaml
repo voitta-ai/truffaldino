@@ -1,0 +1,96 @@
+# DEPRECATED: This file is no longer used
+# Truffaldino now uses JSON format directly
+# Run ./scripts/sync.sh for the new interactive sync
+
+mcp_servers:
+  # Filesystem access
+  filesystem:
+    command: npx
+    args:
+      - -y
+      - "@modelcontextprotocol/server-filesystem"
+      - "/Users/gregory.golberg"
+    description: "Provides filesystem access to home directory"
+    
+  # PagerDuty integration
+  pagerduty:
+    command: uv
+    args:
+      - run
+      - pagerduty-mcp-server
+    env:
+      PAGERDUTY_API_TOKEN: "${PAGERDUTY_API_TOKEN}"
+    cwd: "/Users/gregory.golberg/g/svalka/llm/mcp/pagerduty-mcp-server"
+    description: "PagerDuty incident management"
+    
+  # Postman API testing
+  postman:
+    command: node
+    args:
+      - "build/index.js"
+    env:
+      POSTMAN_API_KEY: "${POSTMAN_API_KEY}"
+    cwd: "/Users/gregory.golberg/g/svalka/llm/mcp/postman-mcp-server"
+    description: "Postman API collection management"
+    
+  # Claude SVG editor
+  claude-svg:
+    command: node
+    args:
+      - "dist/index.js"
+    cwd: "/Users/gregory.golberg/g/svalka/llm/mcp/claude-svg"
+    description: "SVG creation and editing capabilities"
+
+# Agent configurations
+agents:
+  source_directory: "/Users/gregory.golberg/g/svalka/llm/agents"
+  deployment_targets:
+    - claude_code: "~/.claude/agents"
+    - cline: "~/.cline/agents"
+  
+  categories:
+    - engineering
+    - design
+    - marketing
+    - product
+    - project-management
+    - studio-operations
+    - testing
+    - bonus
+
+# Environment variables required
+environment_variables:
+  required:
+    - PAGERDUTY_API_TOKEN
+    - POSTMAN_API_KEY
+    - BRAVE_API_KEY
+    - GITHUB_PERSONAL_ACCESS_TOKEN
+    - FIRECRAWL_API_KEY
+  optional:
+    - LOG_ENABLED
+    - DEBUG
+
+# Tool-specific settings
+tools:
+  claude_desktop:
+    config_path: "~/Library/Application Support/Claude/claude_desktop_config.json"
+    supports_env: true
+    
+  claude_code:
+    config_command: "claude mcp"
+    supports_env: false  # Must use wrapper scripts
+    
+  cline:
+    config_path: "~/.cline/mcp_settings.json"
+    supports_env: true
+    
+  jetbrains:
+    config_path: "~/Library/Application Support/JetBrains/IntelliJIdea2024.3/options/llm.mcpServers.xml"
+    supports_env: true
+
+# Sync settings
+sync:
+  auto_sync: true
+  conflict_resolution: "prompt"  # prompt, master_wins, local_wins
+  backup_on_sync: true
+  watch_interval: 5  # seconds

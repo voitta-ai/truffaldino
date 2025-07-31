@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Truffaldino Sync Script
-# Main entry point for syncing all configurations
+# Interactive JSON-based configuration sync
 
 set -e
 
@@ -17,12 +17,12 @@ if ! command -v python3 &> /dev/null; then
 fi
 
 # Install Python dependencies if needed
-if ! python3 -c "import yaml, dotenv" 2>/dev/null; then
+if ! python3 -c "import dotenv" 2>/dev/null; then
     echo "📦 Installing required Python packages..."
     if [ -f "$PROJECT_ROOT/requirements.txt" ]; then
         pip3 install --user -r "$PROJECT_ROOT/requirements.txt"
     else
-        pip3 install --user pyyaml python-dotenv
+        pip3 install --user python-dotenv
     fi
 fi
 
@@ -36,8 +36,8 @@ else
     echo "⚠️  No .env file found, some MCP servers may not work"
 fi
 
-# Run the sync manager
-echo "🔄 Running sync manager..."
-python3 "$PROJECT_ROOT/sync/sync-manager.py" "$@"
+# Run the new sync manager
+echo "🔄 Starting interactive sync..."
+python3 "$PROJECT_ROOT/sync/sync-manager-v2.py" "$@"
 
 echo "🎉 Sync complete!"

@@ -10,13 +10,9 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 echo "🎪 Initializing Truffaldino..."
 
-# Check if master config exists
-if [ ! -f "$PROJECT_ROOT/configs/master-config.yaml" ]; then
-    echo "❌ No master-config.yaml found. Please copy and customize the example:"
-    echo "   cp configs/master-config.yaml.example configs/master-config.yaml"
-    echo "   vim configs/master-config.yaml"
-    exit 1
-fi
+# No master config needed anymore - we sync directly between tools
+echo "ℹ️  Truffaldino now uses direct JSON syncing between AI tools"
+echo "   No master config file needed!"
 
 # Check if .env exists
 if [ ! -f "$PROJECT_ROOT/env/.env" ]; then
@@ -42,10 +38,9 @@ fi
 echo "✅ Truffaldino initialized!"
 echo ""
 echo "Next steps:"
-echo "1. Import configs: ./scripts/smart-import.py (detects all tools)"
-echo "   OR ./scripts/import-from-claude.py (Claude Desktop only)"
-echo "   OR edit configs/master-config.yaml manually"
-echo "2. Edit env/.env with your API keys"
-echo "3. Run ./scripts/sync.sh to sync all configurations"
+echo "1. Run ./scripts/sync.sh to sync configs between AI tools"
+echo "   OR ./scripts/smart-import.py to create a superset from all tools"
+echo "2. Edit env/.env with your API keys and BASE_PROMPT path"
+echo "3. Build MCP server: cd mcp-server && npm install && npm run build"
 echo "4. Optionally install LaunchAgent: ./scripts/install-launchagent.sh"
 echo "5. View version history: ./scripts/manage-versions.sh list"

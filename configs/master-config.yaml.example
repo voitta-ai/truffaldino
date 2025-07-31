@@ -1,5 +1,6 @@
-# Master Configuration Template
-# Copy this to master-config.yaml and customize for your setup
+# Configuration Example (JSON format)
+# Truffaldino now uses JSON configs directly from AI tools
+# This YAML format is deprecated - see README for new workflow
 
 mcp_servers:
   # Example: Filesystem access

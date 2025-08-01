@@ -31,3 +31,7 @@ Thumbs.db
 
 # Version control files
 .truffaldino/
+
+.venv
+.wip
+__pycache__

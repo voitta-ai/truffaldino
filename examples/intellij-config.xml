@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<application>
+  <component name="LLMMcpServers">
+    <servers>
+      <server name="filesystem" command="npx" args="-y @modelcontextprotocol/server-filesystem /path/to/project">
+        <env key="FILESYSTEM_ACCESS_TYPE" value="read_write"/>
+      </server>
+      <server name="jvm" command="npx" args="-y @modelcontextprotocol/server-jvm">
+        <env key="JAVA_HOME" value="/usr/lib/jvm/java-11-openjdk"/>
+      </server>
+    </servers>
+  </component>
+</application>

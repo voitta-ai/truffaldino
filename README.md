@@ -1,324 +1,283 @@
-# Truffaldino - Personal AI Development Setup
+# Truffaldino
 
-My personal dotfiles-style configuration for managing AI agents, MCP servers, and development tools. Feel free to fork and adapt for your own setup.
+**AI Development Configuration Manager**
 
-## What This Is
+Truffaldino synchronizes MCP (Model Context Protocol) servers and system prompts across multiple AI development tools. Think of it as "dotfiles for the AI era" - a simple way to keep your AI assistant configurations consistent across different applications.
 
-This is my personal system for keeping AI development tools in sync across different environments. It's basically dotfiles for the AI era - handles configurations for Claude Desktop, Claude Code, Cline, JetBrains AI, MCP servers, and agent libraries.
+## Supported Applications
 
-Not a product, just sharing what works for me. Your mileage may vary.
+| # | Application | MCP Support | Prompt Support | Status |
+|---|-------------|-------------|----------------|---------|
+| 1 | Claude Desktop | ✅ | ❌ | JSON config |
+| 2 | Claude Code | ✅ | ❌ | CLI commands |
+| 3 | Cline | ✅ | ✅ | JSON config |
+| 4 | Cursor | ✅ | ✅ | JSON config |
+| 5 | IntelliJ | ✅ | ✅ | XML config |
 
-## What It Does
+## Installation
 
-- Keeps MCP server configs synced across all my AI tools
-- Manages my personal agent library 
-- Handles environment variables and API keys safely
-- Syncs base system prompts across all AI assistants
-- One command to sync everything when I add new tools
-- Provides MCP server so any AI assistant can manage the system
-
-## My Setup
-
-```bash
-# Fork this, then clone to your preferred location
-git clone https://github.com/yourusername/truffaldino.git ~/dotfiles/ai
-cd ~/dotfiles/ai
-
-# Install Python dependencies
-pip3 install -r requirements.txt
-
-# Set up environment variables
-cp env/.env.template env/.env
-vim env/.env  # Add your API keys and base prompt path
-
-# Set up base prompt (optional)
-cp prompts/base-prompt.md.example prompts/base-prompt.md
-vim prompts/base-prompt.md  # Customize your base prompt
-
-# Initialize the system
-./scripts/init.sh
-
-# Interactive sync between AI tools
-./scripts/sync.sh
-# This will:
-# 1. Detect all your AI tool configs (Claude, Cline, etc.)
-# 2. Let you choose which tool to sync FROM
-# 3. Let you choose which tools to sync TO
-# 4. Handle conflicts intelligently
-
-# Build MCP server (optional - lets AI assistants manage Truffaldino)
-cd mcp-server && npm install && npm run build
-```
-
-## Directory Structure
-
-```
-truffaldino/
-├── configs/          # Config examples and generated files
-├── sync/             # Configuration sync tools
-├── agents/           # Agent library management  
-├── env/              # Environment variable templates
-├── prompts/          # Base prompt templates
-├── scripts/          # All management scripts
-├── mcp-server/       # Truffaldino MCP server
-└── ~/.truffaldino/   # Version backups (in home directory)
-```
-
-## How It Works
-
-### Interactive Sync (Primary Workflow)
-The main workflow is now interactive JSON-based syncing:
-
-```bash
-./scripts/sync.sh
-```
-
-This will:
-1. **Detect all AI tool configs** on your system (Claude Desktop, Cline, etc.)
-2. **Show what's available** with file paths and status
-3. **Let you choose source** - which config to sync FROM
-4. **Let you choose targets** - which configs to sync TO
-5. **Handle conflicts** - merge, replace, or review each conflict
-6. **Backup automatically** - versions saved before any changes
-
-Example session:
-```
-📂 Detected configurations:
-1. ✅ Claude Desktop    ~/Library/Application Support/Claude/claude_desktop_config.json
-2. ✅ Cline            ~/.cline/mcp_settings.json
-3. ➕ Cursor           ~/.cursor/mcp_config.json
-
-📤 Select source configuration:
-1. Claude Desktop
-2. Cline
-Source (number): 1
-
-✅ Loaded 5 MCP servers from Claude Desktop
-
-📥 Select target configurations (comma-separated numbers, or 'all'):
-2. Cline            (exists)
-3. Cursor           (will create)
-Targets: all
-
-🔄 Select sync mode:
-1. Merge - Add missing servers only
-2. Replace - Replace all servers
-3. Smart - Merge with conflict resolution
-Mode (1-3): 3
-```
-
-### Smart Import (Alternative)
-For creating a superset from ALL detected configs:
-
-```bash
-./scripts/smart-import.py
-```
-
-This creates a merged config with conflict annotations that you can edit.
-
-## Sharing Your Setup
-
-If you fork this:
-- Keep your actual API keys in `.env` (gitignored)
-- The system works with YOUR existing configs - no master file needed
-- Document any custom MCP servers in configs/claude-desktop-example.json
-- Consider contributing back any useful sync scripts
-
-## Automatic Sync (Optional)
-
-Set up automatic syncing when configs change:
-
-```bash
-# Install LaunchAgent (macOS only)
-./scripts/install-launchagent.sh
-
-# Check if it's running
-launchctl list | grep truffaldino
-
-# View logs
-tail -f logs/autosync.log
-
-# Uninstall if needed
-./scripts/uninstall-launchagent.sh
-```
-
-The LaunchAgent watches:
-- Claude Desktop config changes
-- Your master-config.yaml changes
-
-When either changes, it automatically runs the sync.
-
-## Configuration Management
-
-### Direct Tool-to-Tool Sync (Primary Method)
-No master config needed! Sync directly between your AI tools:
-
-```bash
-./scripts/sync.sh
-```
-
-The interactive workflow lets you:
-- Choose any detected tool as the source
-- Sync to one or multiple target tools  
-- Handle conflicts with merge/replace/smart modes
-- Automatically backup before changes
-
-### Import from All Tools (Alternative)
-Create a superset config from ALL your tools:
-
-```bash
-./scripts/smart-import.py
-```
-
-This:
-- Detects all AI tool configs
-- Shows conflicts between different tools
-- Creates annotated JSON you can edit
-- Saves to `configs/truffaldino.json`
-
-### Version Management
-RCS-style versioning for all configuration files:
-
-```bash
-# List all versions
-./scripts/manage-versions.sh list
-
-# List versions of specific file
-./scripts/manage-versions.sh list master-config.yaml
-
-# Show specific version
-./scripts/manage-versions.sh show master-config.yaml 20240130_143022
-
-# Compare versions
-./scripts/manage-versions.sh diff master-config.yaml 20240130_143022 20240131_091445
-
-# Restore to previous version
-./scripts/manage-versions.sh restore master-config.yaml 20240130_143022
-
-# Clean up old versions
-./scripts/manage-versions.sh cleanup 30
-```
-
-### Prompt Management
-Sync your base prompt across all AI tools:
-
-```bash
-# Sync base prompt to all detected AI tools
-./scripts/sync-prompts.py
-
-# Sync to specific tools only
-./scripts/sync-prompts.py --tools claude_code cline cursor
-
-# Dry run (show what would be done)
-./scripts/sync-prompts.py --dry-run
-
-# List available tools
-./scripts/sync-prompts.py --list
-```
-
-### Master Management Tool
-Unified interface for all Truffaldino operations:
-
-```bash
-# Show system status
-./scripts/truffaldino.py status
-
-# Interactive mode
-./scripts/truffaldino.py --interactive
-
-# Run any command through the master tool
-./scripts/truffaldino.py sync
-./scripts/truffaldino.py import
-./scripts/truffaldino.py sync-prompts
-```
-
-### MCP Server Integration
-The Truffaldino MCP server lets any AI assistant manage your configuration:
-
-#### Step 1: Build the MCP Server
-```bash
-# Build the MCP server
-cd mcp-server
-npm install
-npm run build
-cd ..
-```
-
-#### Step 2: Add to Your Configuration
-Add the Truffaldino MCP server to any AI tool config (e.g., Claude Desktop):
-
-```json
-{
-  "mcpServers": {
-    "truffaldino": {
-      "command": "node",
-      "args": ["mcp-server/dist/index.js"],
-      "cwd": "/Users/yourusername/path/to/truffaldino"
-    }
-  }
-}
-```
-
-**IMPORTANT**: The `cwd` must be the full absolute path to your Truffaldino directory.
-
-#### Step 3: Sync to Other Tools
-```bash
-# Use the interactive sync to propagate to other tools
-./scripts/sync.sh
-# Choose the tool you edited as source
-# Choose other tools as targets
-```
-
-#### Step 4: Restart Claude Desktop
-After syncing, **you must restart Claude Desktop** for the MCP server to be available:
-- Quit Claude Desktop completely (Cmd+Q on macOS)
-- Start Claude Desktop again
-- The Truffaldino tools will now be available
-
-#### Step 5: Test in Claude
-You can now ask Claude to use Truffaldino tools:
-- "Show me the Truffaldino system status"
-- "Sync all my configurations" 
-- "Import configs from all my AI tools"
-- "Sync my base prompt to all assistants"
-
-#### Available MCP Tools
-Once configured, these tools are available to any AI assistant:
-- `truffaldino_status` - Show system status and health
-- `truffaldino_sync` - Sync all configurations  
-- `truffaldino_import` - Smart import from detected tools
-- `truffaldino_sync_prompts` - Sync base prompt to all tools
-- `truffaldino_list_versions` - List configuration backups
-- `truffaldino_restore_version` - Restore previous version
-- `truffaldino_install_automation` - Set up auto-sync (macOS)
-- `truffaldino_help` - Show detailed help
-
-#### Troubleshooting MCP Server
-If the tools aren't working:
-
-1. **Check the server is in your config**:
+1. **Clone the repository:**
    ```bash
-   cat ~/Library/Application\ Support/Claude/claude_desktop_config.json | grep truffaldino
+   git clone <repository_url>
+   cd truffaldino
    ```
 
-2. **Verify the path is correct**:
-   - Must be an absolute path (starts with `/`)
-   - The path must point to your Truffaldino directory
-   - Example: `/Users/jane/projects/truffaldino`
-
-3. **Check server logs**:
-   - Claude Desktop logs: `~/Library/Logs/Claude/`
-   - Look for any error messages about the Truffaldino server
-
-4. **Test the server manually**:
+2. **Install dependencies:**
    ```bash
-   cd /path/to/truffaldino
-   node mcp-server/dist/index.js
-   # Should output: "Truffaldino MCP server running on stdio"
+   pip install -r requirements.txt
    ```
 
-## Why I Built This
+3. **Make scripts executable:**
+   ```bash
+   chmod +x main.py mcp.py
+   ```
 
-Got tired of manually updating MCP configs across 4 different AI tools every time I added a new server. This keeps everything in sync from one master file.
+## CLI Usage
 
-Dotfiles philosophy: shareable structure, personal configuration.
+### Command Line Flags
+
+```bash
+# List all supported AI applications
+./main.py --list-apps
+
+# Show MCP servers for a specific app (by number)
+./main.py --show-mcps 1
+
+# Show system prompt for a specific app
+./main.py --show-prompt 3
+
+# Sync MCP servers from one app to another
+./main.py --sync-mcp --from 1 --to 3
+
+# Sync prompts between apps
+./main.py --sync-prompt --from 3 --to 4
+```
+
+### Interactive Mode
+
+Run without arguments for an interactive menu:
+
+```bash
+./main.py
+```
+
+This will show:
+```
+🎪 Truffaldino - AI Development Configuration Manager
+
+Available AI Applications:
+1. ✅ Claude Desktop
+2. ❌ Claude Code
+3. ✅ Cline
+4. ❌ Cursor
+5. ✅ IntelliJ
+
+Options:
+a) List/Show MCP servers for an app
+b) Sync MCP servers between apps
+c) Show/Sync prompts between apps
+d) Show system status
+e) Exit
+
+Choice: _
+```
+
+## MCP Server Usage
+
+Truffaldino can be used as an MCP server to provide configuration management tools to AI assistants.
+
+### Setup as MCP Server
+
+1. **Add to your AI tool's configuration** (e.g., Claude Desktop):
+   ```json
+   {
+     "mcpServers": {
+       "truffaldino": {
+         "command": "python",
+         "args": ["/path/to/truffaldino/mcp.py"]
+       }
+     }
+   }
+   ```
+
+2. **Restart your AI application** to load the new MCP server.
+
+### Available MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `truffaldino_list_apps` | List supported applications and installation status |
+| `truffaldino_show_mcps` | Show MCP servers for a specific app |
+| `truffaldino_sync_mcps` | Sync MCP servers between apps |
+| `truffaldino_show_prompts` | Show system prompts for an app |
+| `truffaldino_sync_prompts` | Sync prompts between apps |
+| `truffaldino_status` | Show system status and health |
+| `truffaldino_resolve_conflicts` | Handle configuration conflicts via file editing |
+
+### Conflict Resolution
+
+When conflicts are detected during sync operations in an MCP environment:
+
+1. **Truffaldino creates a temporary conflict file** with details about conflicting configurations
+2. **The AI assistant is instructed to have you edit the file** using your preferred editor (`$EDITOR`)
+3. **You resolve conflicts** by uncommenting your preferred configuration for each server
+4. **The AI assistant reloads** and applies your resolutions
+
+Example conflict file:
+```
+# Truffaldino Configuration Conflicts
+# Edit this file to resolve conflicts, then save and exit
+
+## Server: filesystem
+### Option 1 (Source):
+# {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "/new/path"]}
+
+### Option 2 (Target):  
+# {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "/old/path"]}
+
+### Your choice (uncomment one):
+# KEEP: source
+# KEEP: target
+```
+
+## Configuration Paths
+
+### Claude Desktop
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Linux**: `~/.config/claude/config.json`
+- **Windows**: `~/AppData/Roaming/Claude/config.json`
+
+### Claude Code
+- **All platforms**: Uses `claude mcp` CLI commands (no config file)
+
+### Cline
+- **All platforms**: `~/.cline/mcp_settings.json`
+- **Prompts**: `~/.cline/system_prompt.txt`
+
+### Cursor
+- **All platforms**: `~/.cursor/mcp_config.json`
+- **Prompts**: `~/.cursor/system_prompt.txt`
+
+### IntelliJ
+- **macOS**: `~/Library/Application Support/JetBrains/IntelliJIdea*/options/`
+- **Linux**: `~/.config/JetBrains/IntelliJIdea*/options/`
+- **Windows**: `~/AppData/Roaming/JetBrains/IntelliJIdea*/options/`
+- **Config**: `llm.mcpServers.xml`
+- **Prompts**: `ai_assistant_system_prompt.txt`
+
+## Versioning System
+
+Truffaldino automatically creates backups of configurations before making changes:
+
+```
+~/.truffaldino/
+├── versions/
+│   ├── claude_desktop_20250131_143022.json
+│   ├── cline_20250131_143025.json
+│   ├── cursor_20250131_143028.json
+│   └── intellij_20250131_143030.xml
+├── conflicts.log
+└── config.json
+```
+
+- **Automatic backups** before every sync operation
+- **Timestamped filenames** for easy identification
+- **Keeps last 10 versions** per application
+- **Restore functionality** (manual for now)
+
+## Examples
+
+See the `examples/` directory for sample configurations:
+
+- `claude-desktop-config.json` - Claude Desktop MCP server setup
+- `cline-config.json` - Cline/VS Code extension setup  
+- `cursor-config.json` - Cursor IDE setup
+- `intellij-config.xml` - IntelliJ XML configuration
+- `base-prompt.md` - Example system prompt
+
+## Architecture
+
+### Core Files
+
+- **`main.py`** - CLI entry point with argument parsing and interactive menu
+- **`sync.py`** - Core synchronization logic and configuration management
+- **`mcp.py`** - MCP server implementation
+- **`config.py`** - Application definitions and configuration paths
+
+### Key Classes
+
+- **`AIApp`** - Represents an AI application with its configuration paths and capabilities
+- **`ConfigManager`** - Handles loading/saving configurations across different formats (JSON/XML/CLI)
+- **`SyncEngine`** - Core synchronization logic with conflict detection
+- **`ConflictResolver`** - Handles configuration conflicts via temporary file editing
+
+## Sync Modes
+
+### Merge Mode (Default)
+- Adds missing MCP servers from source to target
+- Keeps existing servers in target unchanged
+- Safe option that doesn't overwrite existing configurations
+
+### Replace Mode
+- Completely replaces target configuration with source
+- Removes servers that exist only in target
+- Use with caution as it's destructive
+
+### Smart Mode (CLI only)
+- Interactive conflict resolution
+- Shows conflicting configurations side-by-side
+- Lets you choose which configuration to keep for each conflict
+
+## Troubleshooting
+
+### Common Issues
+
+1. **"App not found" errors**
+   - Check if the application is installed
+   - Verify configuration paths exist
+   - For Claude Code, ensure `claude` CLI is in PATH
+
+2. **Permission errors**
+   - Ensure write permissions to configuration directories
+   - Check if applications are running (may lock config files)
+
+3. **MCP server not loading**
+   - Verify Python path in configuration
+   - Check that `mcp.py` is executable
+   - Restart the AI application after adding MCP server
+
+### Debug Information
+
+Use the status command to check system health:
+```bash
+./main.py --list-apps  # Check which apps are detected
+./main.py              # Interactive mode shows detailed status
+```
+
+Or via MCP:
+```
+Use the truffaldino_status tool to get system information
+```
+
+## Development
+
+### Adding New AI Applications
+
+1. **Update `config.py`** - Add new `AIApp` definition
+2. **Extend `ConfigManager`** - Add loading/saving methods for the new format
+3. **Update documentation** - Add paths and capabilities to README
+
+### Contributing
+
+- Follow existing code style and patterns
+- Add error handling for new functionality
+- Update documentation for any new features
+- Test with multiple AI applications
+
+## License
+
+[Add your license here]
+
+---
+
+**Truffaldino** - Because managing AI configurations shouldn't be harder than using the AI itself. 🎪

@@ -1,0 +1,434 @@
+#!/usr/bin/env python3
+"""
+Truffaldino MCP Server
+Provides access to Truffaldino functionality via Model Context Protocol
+"""
+
+import sys
+import json
+import os
+import subprocess
+import tempfile
+from typing import Any, Dict, List, Optional
+
+# Try to import MCP dependencies
+try:
+    from mcp.server import Server, NotificationOptions
+    from mcp.server.models import InitializationOptions
+    import mcp.server.stdio
+    import mcp.types as types
+except ImportError:
+    print("Error: MCP dependencies not found. Install with: pip install mcp", file=sys.stderr)
+    sys.exit(1)
+
+from config import SUPPORTED_APPS, get_app_by_number, TEMP_CONFLICT_FILE
+from sync import ConfigManager, SyncEngine, ConflictResolver
+
+
+class TruffaldinoMCPServer:
+    """Truffaldino MCP Server implementation"""
+    
+    def __init__(self):
+        self.config_manager = ConfigManager()
+        self.sync_engine = SyncEngine()
+        
+        self.server = Server("truffaldino")
+        self.setup_handlers()
+    
+    def setup_handlers(self):
+        """Set up MCP request handlers"""
+        
+        @self.server.list_tools()
+        async def handle_list_tools() -> List[types.Tool]:
+            """List available Truffaldino tools"""
+            return [
+                types.Tool(
+                    name="truffaldino_list_apps",
+                    description="List all supported AI applications and their installation status",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    }
+                ),
+                types.Tool(
+                    name="truffaldino_show_mcps",
+                    description="Show MCP servers configured for a specific AI application",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "app_number": {
+                                "type": "integer",
+                                "description": "Application number (1-5)",
+                                "minimum": 1,
+                                "maximum": 5
+                            }
+                        },
+                        "required": ["app_number"]
+                    }
+                ),
+                types.Tool(
+                    name="truffaldino_sync_mcps",
+                    description="Sync MCP servers from one AI application to another",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "from_app": {
+                                "type": "integer",
+                                "description": "Source application number (1-5)",
+                                "minimum": 1,
+                                "maximum": 5
+                            },
+                            "to_app": {
+                                "type": "integer",
+                                "description": "Target application number (1-5)",
+                                "minimum": 1,
+                                "maximum": 5
+                            },
+                            "mode": {
+                                "type": "string",
+                                "description": "Sync mode: merge, replace, or smart",
+                                "enum": ["merge", "replace", "smart"],
+                                "default": "smart"
+                            }
+                        },
+                        "required": ["from_app", "to_app"]
+                    }
+                ),
+                types.Tool(
+                    name="truffaldino_show_prompts",
+                    description="Show system prompt for a specific AI application",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "app_number": {
+                                "type": "integer",
+                                "description": "Application number (1-5)",
+                                "minimum": 1,
+                                "maximum": 5
+                            }
+                        },
+                        "required": ["app_number"]
+                    }
+                ),
+                types.Tool(
+                    name="truffaldino_sync_prompts",
+                    description="Sync system prompts from one AI application to another",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "from_app": {
+                                "type": "integer",
+                                "description": "Source application number (1-5)",
+                                "minimum": 1,
+                                "maximum": 5
+                            },
+                            "to_app": {
+                                "type": "integer",
+                                "description": "Target application number (1-5)",
+                                "minimum": 1,
+                                "maximum": 5
+                            }
+                        },
+                        "required": ["from_app", "to_app"]
+                    }
+                ),
+                types.Tool(
+                    name="truffaldino_status",
+                    description="Show Truffaldino system status and configuration health",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    }
+                ),
+                types.Tool(
+                    name="truffaldino_resolve_conflicts",
+                    description="Handle configuration conflicts via temporary file editing",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "conflicts": {
+                                "type": "array",
+                                "description": "List of conflicts to resolve",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "server_name": {"type": "string"},
+                                        "source": {"type": "object"},
+                                        "target": {"type": "object"}
+                                    },
+                                    "required": ["server_name", "source", "target"]
+                                }
+                            }
+                        },
+                        "required": ["conflicts"]
+                    }
+                )
+            ]
+        
+        @self.server.call_tool()
+        async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.TextContent]:
+            """Handle tool calls"""
+            
+            if name == "truffaldino_list_apps":
+                return await self.handle_list_apps()
+            
+            elif name == "truffaldino_show_mcps":
+                app_number = arguments.get("app_number")
+                return await self.handle_show_mcps(app_number)
+            
+            elif name == "truffaldino_sync_mcps":
+                from_app = arguments.get("from_app")
+                to_app = arguments.get("to_app")
+                mode = arguments.get("mode", "smart")
+                return await self.handle_sync_mcps(from_app, to_app, mode)
+            
+            elif name == "truffaldino_show_prompts":
+                app_number = arguments.get("app_number")
+                return await self.handle_show_prompts(app_number)
+            
+            elif name == "truffaldino_sync_prompts":
+                from_app = arguments.get("from_app")
+                to_app = arguments.get("to_app")
+                return await self.handle_sync_prompts(from_app, to_app)
+            
+            elif name == "truffaldino_status":
+                return await self.handle_status()
+            
+            elif name == "truffaldino_resolve_conflicts":
+                conflicts = arguments.get("conflicts", [])
+                return await self.handle_resolve_conflicts(conflicts)
+            
+            else:
+                return [types.TextContent(type="text", text=f"Unknown tool: {name}")]
+    
+    async def handle_list_apps(self) -> List[types.TextContent]:
+        """Handle list_apps tool call"""
+        try:
+            result = []
+            result.append("🎪 Truffaldino - Supported AI Applications\n")
+            
+            detected_apps = self.config_manager.detect_installed_apps()
+            
+            for number, app_name, is_installed in detected_apps:
+                status = "✅ Installed" if is_installed else "❌ Not found"
+                result.append(f"{number}. {app_name:15} {status}")
+            
+            return [types.TextContent(type="text", text="\n".join(result))]
+        
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Error listing apps: {str(e)}")]
+    
+    async def handle_show_mcps(self, app_number: int) -> List[types.TextContent]:
+        """Handle show_mcps tool call"""
+        try:
+            app = get_app_by_number(app_number)
+            if not app:
+                return [types.TextContent(type="text", text=f"Invalid app number: {app_number}")]
+            
+            result = []
+            result.append(f"🔧 MCP Servers for {app.name}\n")
+            
+            if not app.has_mcp_support:
+                result.append(f"{app.name} does not support MCP servers")
+                return [types.TextContent(type="text", text="\n".join(result))]
+            
+            servers = self.config_manager.load_mcp_config(app_number)
+            if servers is None:
+                result.append(f"Failed to load configuration from {app.name}")
+                return [types.TextContent(type="text", text="\n".join(result))]
+            
+            if not servers:
+                result.append("No MCP servers configured")
+                return [types.TextContent(type="text", text="\n".join(result))]
+            
+            for server_name, config in servers.items():
+                result.append(f"📦 {server_name}")
+                result.append(f"   Command: {config.get('command', 'N/A')}")
+                if config.get('args'):
+                    result.append(f"   Args: {' '.join(config['args'])}")
+                if config.get('env'):
+                    result.append(f"   Environment: {list(config['env'].keys())}")
+                result.append("")
+            
+            result.append(f"Total: {len(servers)} MCP servers")
+            
+            return [types.TextContent(type="text", text="\n".join(result))]
+        
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Error showing MCP servers: {str(e)}")]
+    
+    async def handle_sync_mcps(self, from_app: int, to_app: int, mode: str) -> List[types.TextContent]:
+        """Handle sync_mcps tool call"""
+        try:
+            from_app_obj = get_app_by_number(from_app)
+            to_app_obj = get_app_by_number(to_app)
+            
+            if not from_app_obj or not to_app_obj:
+                return [types.TextContent(type="text", text="Invalid app numbers")]
+            
+            if not from_app_obj.has_mcp_support or not to_app_obj.has_mcp_support:
+                return [types.TextContent(type="text", text="One or both apps don't support MCP servers")]
+            
+            # For MCP calls, we'll use "merge" mode to avoid interactive prompts
+            # Conflicts should be handled via the resolve_conflicts tool
+            if mode == "smart":
+                mode = "merge"
+            
+            success = self.sync_engine.sync_mcp_servers(from_app, to_app, mode)
+            
+            if success:
+                result = f"✅ Successfully synced MCP servers from {from_app_obj.name} to {to_app_obj.name}"
+            else:
+                result = f"❌ Failed to sync MCP servers from {from_app_obj.name} to {to_app_obj.name}"
+            
+            return [types.TextContent(type="text", text=result)]
+        
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Error syncing MCP servers: {str(e)}")]
+    
+    async def handle_show_prompts(self, app_number: int) -> List[types.TextContent]:
+        """Handle show_prompts tool call"""
+        try:
+            app = get_app_by_number(app_number)
+            if not app:
+                return [types.TextContent(type="text", text=f"Invalid app number: {app_number}")]
+            
+            result = []
+            result.append(f"💬 System Prompt for {app.name}\n")
+            
+            if not app.has_prompt_support:
+                result.append(f"{app.name} does not support system prompts")
+                return [types.TextContent(type="text", text="\n".join(result))]
+            
+            prompt_data = self.config_manager.load_prompt(app_number)
+            if not prompt_data:
+                result.append("No system prompt found")
+                return [types.TextContent(type="text", text="\n".join(result))]
+            
+            prompt_content, file_path = prompt_data
+            result.append(f"📁 File: {file_path}")
+            result.append(f"📝 Content ({len(prompt_content)} characters):")
+            result.append("-" * 60)
+            result.append(prompt_content)
+            result.append("-" * 60)
+            
+            return [types.TextContent(type="text", text="\n".join(result))]
+        
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Error showing prompt: {str(e)}")]
+    
+    async def handle_sync_prompts(self, from_app: int, to_app: int) -> List[types.TextContent]:
+        """Handle sync_prompts tool call"""
+        try:
+            from_app_obj = get_app_by_number(from_app)
+            to_app_obj = get_app_by_number(to_app)
+            
+            if not from_app_obj or not to_app_obj:
+                return [types.TextContent(type="text", text="Invalid app numbers")]
+            
+            if not from_app_obj.has_prompt_support or not to_app_obj.has_prompt_support:
+                return [types.TextContent(type="text", text="One or both apps don't support system prompts")]
+            
+            success = self.sync_engine.sync_prompts(from_app, to_app)
+            
+            if success:
+                result = f"✅ Successfully synced prompts from {from_app_obj.name} to {to_app_obj.name}"
+            else:
+                result = f"❌ Failed to sync prompts from {from_app_obj.name} to {to_app_obj.name}"
+            
+            return [types.TextContent(type="text", text=result)]
+        
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Error syncing prompts: {str(e)}")]
+    
+    async def handle_status(self) -> List[types.TextContent]:
+        """Handle status tool call"""
+        try:
+            result = []
+            result.append("📊 Truffaldino System Status\n")
+            
+            # Check Truffaldino directories
+            from config import TRUFFALDINO_DIR, VERSIONS_DIR
+            
+            result.append(f"📁 Truffaldino directory: {TRUFFALDINO_DIR}")
+            result.append(f"   Exists: {'✅' if TRUFFALDINO_DIR.exists() else '❌'}")
+            
+            result.append(f"📚 Versions directory: {VERSIONS_DIR}")
+            if VERSIONS_DIR.exists():
+                backup_count = len(list(VERSIONS_DIR.iterdir()))
+                result.append(f"   Backups: {backup_count} files")
+            else:
+                result.append("   Exists: ❌")
+            
+            # Check app installations
+            result.append("\n🔍 Detected Applications:")
+            detected_apps = self.config_manager.detect_installed_apps()
+            for number, app_name, is_installed in detected_apps:
+                status = "✅ Installed" if is_installed else "❌ Not found"
+                result.append(f"   {app_name}: {status}")
+            
+            return [types.TextContent(type="text", text="\n".join(result))]
+        
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Error getting status: {str(e)}")]
+    
+    async def handle_resolve_conflicts(self, conflicts: List[Dict[str, Any]]) -> List[types.TextContent]:
+        """Handle conflict resolution via temp file editing"""
+        try:
+            if not conflicts:
+                return [types.TextContent(type="text", text="No conflicts provided")]
+            
+            # Create conflict file
+            conflict_file = ConflictResolver.create_conflict_file(conflicts)
+            
+            # Get editor command
+            editor = os.environ.get('EDITOR', 'vi')
+            
+            result = []
+            result.append("🔧 Conflict Resolution Required")
+            result.append("")
+            result.append(f"A conflict file has been created at: {conflict_file}")
+            result.append("")
+            result.append("To resolve conflicts:")
+            result.append(f"1. Open the file in your editor: {editor} {conflict_file}")
+            result.append("2. For each conflict, uncomment the line with your choice:")
+            result.append("   - 'KEEP: source' to use the source configuration")
+            result.append("   - 'KEEP: target' to use the target configuration")
+            result.append("3. Save and close the file")
+            result.append("4. Call this tool again to apply the resolutions")
+            result.append("")
+            result.append("After editing, reload this conversation and sync again.")
+            
+            return [types.TextContent(type="text", text="\n".join(result))]
+        
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Error handling conflicts: {str(e)}")]
+    
+    async def run(self):
+        """Run the MCP server"""
+        async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
+            await self.server.run(
+                read_stream,
+                write_stream,
+                InitializationOptions(
+                    server_name="truffaldino",
+                    server_version="1.0.0",
+                    capabilities=self.server.get_capabilities(
+                        notification_options=NotificationOptions(),
+                        experimental_capabilities={},
+                    ),
+                ),
+            )
+
+
+async def main():
+    """Main entry point for MCP server"""
+    server = TruffaldinoMCPServer()
+    await server.run()
+
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())

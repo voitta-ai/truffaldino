@@ -8,11 +8,11 @@ Truffaldino synchronizes MCP (Model Context Protocol) servers and system prompts
 
 | # | Application | MCP Support | Prompt Support | Status |
 |---|-------------|-------------|----------------|---------|
-| 1 | Claude Desktop | ✅ | ❌ | JSON config |
-| 2 | Claude Code | ✅ | ❌ | CLI commands |
-| 3 | Cline | ✅ | ✅ | JSON config |
-| 4 | Cursor | ✅ | ✅ | JSON config |
-| 5 | IntelliJ | ✅ | ✅ | XML config |
+| 1 | Claude Desktop | Yes | No | JSON config |
+| 2 | Claude Code | Yes | No | CLI commands |
+| 3 | Cline | Yes | Yes | JSON config |
+| 4 | Cursor | Yes | Yes | JSON config |
+| 5 | IntelliJ | Yes | Yes | XML config |
 
 ## Installation
 
@@ -63,14 +63,14 @@ Run without arguments for an interactive menu:
 
 This will show:
 ```
-🎪 Truffaldino - AI Development Configuration Manager
+Truffaldino - AI Development Configuration Manager
 
 Available AI Applications:
-1. ✅ Claude Desktop
-2. ❌ Claude Code
-3. ✅ Cline
-4. ❌ Cursor
-5. ✅ IntelliJ
+1. [INSTALLED] Claude Desktop
+2. [NOT FOUND] Claude Code
+3. [INSTALLED] Cline
+4. [NOT FOUND] Cursor
+5. [INSTALLED] IntelliJ
 
 Options:
 a) List/Show MCP servers for an app
@@ -280,4 +280,4 @@ Use the truffaldino_status tool to get system information
 
 ---
 
-**Truffaldino** - Because managing AI configurations shouldn't be harder than using the AI itself. 🎪
+**Truffaldino** - Because managing AI configurations shouldn't be harder than using the AI itself.

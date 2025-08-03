@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import hashlib
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
@@ -195,7 +196,7 @@ class ConfigManager:
                 return str(backup_path)
         else:
             config_path = app.get_config_path()
-            if config_path and config_path.exists():
+            if config_path and config_path.exists() and config_path.is_file():
                 ext = config_path.suffix
                 backup_name = f"{app.id}_{timestamp}{ext}"
                 backup_path = VERSIONS_DIR / backup_name
@@ -271,7 +272,7 @@ class ConfigManager:
         """Extract Claude Code configuration using CLI"""
         try:
             result = subprocess.run(
-                ["claude", "mcp", "list"],
+                ["claude", "mcp", "list", "--scope", "user"],
                 capture_output=True,
                 text=True,
                 timeout=5
@@ -299,51 +300,80 @@ class ConfigManager:
             return None
     
     def _save_claude_code_config(self, mcp_servers: Dict[str, Any]) -> bool:
-        """Save Claude Code configuration using CLI commands"""
+        """Save Claude Code configuration using CLI commands with superset sync logic"""
         try:
-            # First, remove all existing servers
-            existing = self._load_claude_code_config()
-            if existing:
-                for server_name in existing:
-                    result = subprocess.run(
-                        ["claude", "mcp", "remove", server_name],
-                        capture_output=True,
-                        timeout=5
-                    )
-                    if result.returncode != 0:
-                        print(f"Warning: Failed to remove existing server {server_name}: {result.stderr.decode() if result.stderr else 'Unknown error'}")
+            # Load existing servers to implement superset sync
+            existing_servers = self._load_claude_code_config() or {}
             
-            # Add new servers
+            # Create wrapper script directory
+            wrapper_dir = Path.home() / ".claude-mcp-wrappers"
+            wrapper_dir.mkdir(exist_ok=True)
+            
+            # Identify duplicates to remove (by name, then by command+args+env)
+            duplicates_to_remove = self._find_duplicates(existing_servers, mcp_servers)
+            
+            # Remove only duplicate servers
+            for server_name in duplicates_to_remove:
+                print(f"Removing duplicate server: {server_name}")
+                result = subprocess.run(
+                    ["claude", "mcp", "remove", "--scope", "user", server_name],
+                    capture_output=True,
+                    timeout=5
+                )
+                if result.returncode != 0:
+                    print(f"Warning: Failed to remove duplicate server {server_name}: {result.stderr.decode() if result.stderr else 'Unknown error'}")
+            
+            # Add new servers from source that don't exist in target
             for server_name, config in mcp_servers.items():
-                # Sanitize server name for Claude Code (only letters, numbers, hyphens, underscores)
-                sanitized_name = self._sanitize_server_name(server_name)
+                # Skip if this server already exists (not a duplicate)
+                if self._server_exists_in_target(server_name, config, existing_servers, duplicates_to_remove):
+                    continue
                 
+                # Clean problematic args
                 args = config.get("args", [])
+                clean_args = self._clean_args(args)
                 
                 # Skip servers that use unsupported flags in Claude Code
                 if args and any(arg in ["-m"] for arg in args):
-                    print(f"Skipping {sanitized_name} (from {server_name}) - contains unsupported flags for Claude Code")
+                    print(f"Skipping {server_name} - contains unsupported flags for Claude Code")
                     continue
                 
-                cmd = ["claude", "mcp", "add", sanitized_name, config.get("command", "")]
-                if args:
-                    # Filter out -y flag which Claude Code doesn't support
-                    filtered_args = [arg for arg in args if arg != "-y"]
-                    cmd.extend(filtered_args)
+                command = config.get("command", "")
+                env_vars = config.get("env", {})
                 
-                # Add environment variables if present
-                env = os.environ.copy()
-                if config.get("env"):
-                    env.update(config["env"])
+                # Check if environment variables are needed
+                if env_vars:
+                    print(f"Creating wrapper script for {server_name} with environment variables")
+                    
+                    # Create wrapper script
+                    wrapper_script = wrapper_dir / f"{server_name}.sh"
+                    with open(wrapper_script, 'w') as f:
+                        f.write("#!/bin/bash\n")
+                        
+                        # Add environment variable exports
+                        for key, value in env_vars.items():
+                            f.write(f'export {key}="{value}"\n')
+                        
+                        # Add the actual command
+                        f.write(f"exec {command} {' '.join(clean_args)}\n")
+                    
+                    # Make wrapper script executable
+                    wrapper_script.chmod(0o755)
+                    
+                    # Add to Claude Code using wrapper script with user scope
+                    cmd = ["claude", "mcp", "add", "--scope", "user", server_name, str(wrapper_script)]
+                else:
+                    print(f"Adding server {server_name} directly (no env vars)")
+                    cmd = ["claude", "mcp", "add", "--scope", "user", server_name, command] + clean_args
                 
-                result = subprocess.run(cmd, capture_output=True, timeout=5, env=env)
+                result = subprocess.run(cmd, capture_output=True, timeout=5)
                 if result.returncode != 0:
                     error_msg = result.stderr.decode() if result.stderr else 'Unknown error'
                     # Don't fail if server already exists - this is expected in some sync scenarios
                     if "already exists" in error_msg:
-                        print(f"Warning: {sanitized_name} already exists in Claude Code")
+                        print(f"Warning: {server_name} already exists in Claude Code")
                     else:
-                        print(f"Failed to add {sanitized_name} (from {server_name}) to Claude Code: {error_msg}")
+                        print(f"Failed to add {server_name} (from {server_name}) to Claude Code: {error_msg}")
                         return False
             
             return True
@@ -351,16 +381,81 @@ class ConfigManager:
             print(f"Error updating Claude Code config: {e}")
             return False
     
-    def _sanitize_server_name(self, name: str) -> str:
-        """Sanitize server name for Claude Code compatibility"""
-        import re
-        # Replace invalid characters with underscores
-        sanitized = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
-        # Remove consecutive underscores
-        sanitized = re.sub(r'_+', '_', sanitized)
-        # Remove leading/trailing underscores
-        sanitized = sanitized.strip('_')
-        return sanitized
+    
+    def _clean_args(self, args: List[str]) -> List[str]:
+        """Clean problematic arguments like -y and --with fastmcp"""
+        if not args:
+            return []
+        
+        # Convert to string and clean
+        args_str = " ".join(args)
+        # Remove -y flag
+        args_str = args_str.replace("-y", "")
+        # Remove --with fastmcp
+        args_str = args_str.replace("--with fastmcp", "")
+        # Clean up multiple spaces
+        args_str = " ".join(args_str.split())
+        
+        return args_str.split() if args_str.strip() else []
+    
+    def _find_duplicates(self, existing: Dict[str, Any], new_servers: Dict[str, Any]) -> List[str]:
+        """Find duplicate servers to remove from existing servers"""
+        duplicates = []
+        
+        for new_name, new_config in new_servers.items():
+            # First check by name
+            if new_name in existing:
+                duplicates.append(new_name)
+                continue
+            
+            # Then check by command, args, and env
+            new_command = new_config.get("command", "")
+            new_args = set(new_config.get("args", []))
+            new_env = new_config.get("env", {})
+            
+            for existing_name, existing_config in existing.items():
+                existing_command = existing_config.get("command", "")
+                existing_args = set(existing_config.get("args", []))
+                existing_env = existing_config.get("env", {})
+                
+                if (new_command == existing_command and 
+                    new_args == existing_args and 
+                    new_env == existing_env):
+                    duplicates.append(existing_name)
+                    break
+        
+        return duplicates
+    
+    def _server_exists_in_target(self, server_name: str, config: Dict[str, Any], 
+                               existing: Dict[str, Any], duplicates: List[str]) -> bool:
+        """Check if server already exists in target (excluding duplicates to be removed)"""
+        # If it's in duplicates list, it will be removed, so we can add it
+        if server_name in duplicates:
+            return False
+        
+        # Check by name
+        if server_name in existing:
+            return True
+        
+        # Check by command, args, and env (excluding duplicates)
+        command = config.get("command", "")
+        args = set(config.get("args", []))
+        env = config.get("env", {})
+        
+        for existing_name, existing_config in existing.items():
+            if existing_name in duplicates:
+                continue  # Skip duplicates that will be removed
+            
+            existing_command = existing_config.get("command", "")
+            existing_args = set(existing_config.get("args", []))
+            existing_env = existing_config.get("env", {})
+            
+            if (command == existing_command and 
+                args == existing_args and 
+                env == existing_env):
+                return True
+        
+        return False
     
     def _find_intellij_config_dir(self) -> Optional[Path]:
         """Find the IntelliJ configuration directory"""
@@ -550,6 +645,58 @@ class SyncEngine:
             print(f"Successfully synced prompt from {source_path}")
         
         return success
+    
+    def remove_all_mcp_servers(self, app_number: int) -> bool:
+        """Remove all MCP servers from a specific app"""
+        app = get_app_by_number(app_number)
+        if not app:
+            return False
+        
+        # Create backup first
+        self.config_manager.create_backup(app_number)
+        
+        if app.id == "claude_code":
+            return self._remove_all_claude_code_servers()
+        else:
+            # For other apps, save empty MCP servers configuration
+            return self.config_manager.save_mcp_config(app_number, {})
+    
+    def _remove_all_claude_code_servers(self) -> bool:
+        """Remove all MCP servers from Claude Code using CLI"""
+        try:
+            # Get list of current servers
+            existing_servers = self.config_manager._load_claude_code_config() or {}
+            
+            if not existing_servers:
+                print("No MCP servers found to remove from Claude Code")
+                return True
+            
+            # Remove each server
+            for server_name in existing_servers.keys():
+                result = subprocess.run(
+                    ["claude", "mcp", "remove", "--scope", "user", server_name],
+                    capture_output=True,
+                    timeout=5
+                )
+                if result.returncode != 0:
+                    error_msg = result.stderr.decode() if result.stderr else 'Unknown error'
+                    print(f"Warning: Failed to remove server {server_name}: {error_msg}")
+                else:
+                    print(f"Removed server: {server_name}")
+            
+            # Clean up wrapper scripts directory if it exists
+            wrapper_dir = Path.home() / ".claude-mcp-wrappers"
+            if wrapper_dir.exists():
+                try:
+                    shutil.rmtree(wrapper_dir)
+                    print("Cleaned up wrapper scripts directory")
+                except Exception as e:
+                    print(f"Warning: Could not clean up wrapper scripts: {e}")
+            
+            return True
+        except Exception as e:
+            print(f"Error removing Claude Code servers: {e}")
+            return False
     
     def _smart_merge(self, source: Dict[str, Any], target: Dict[str, Any]) -> Dict[str, Any]:
         """Smart merge with conflict detection"""

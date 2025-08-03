@@ -164,6 +164,22 @@ class TruffaldinoMCPServer:
                         },
                         "required": ["conflicts"]
                     }
+                ),
+                types.Tool(
+                    name="truffaldino_remove_all_mcps",
+                    description="Remove all MCP servers from a specific AI application",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "app_number": {
+                                "type": "integer",
+                                "description": "Application number (1-5)",
+                                "minimum": 1,
+                                "maximum": 5
+                            }
+                        },
+                        "required": ["app_number"]
+                    }
                 )
             ]
         
@@ -200,6 +216,10 @@ class TruffaldinoMCPServer:
                 conflicts = arguments.get("conflicts", [])
                 return await self.handle_resolve_conflicts(conflicts)
             
+            elif name == "truffaldino_remove_all_mcps":
+                app_number = arguments.get("app_number")
+                return await self.handle_remove_all_mcps(app_number)
+            
             else:
                 return [types.TextContent(type="text", text=f"Unknown tool: {name}")]
     
@@ -207,12 +227,12 @@ class TruffaldinoMCPServer:
         """Handle list_apps tool call"""
         try:
             result = []
-            result.append("🎪 Truffaldino - Supported AI Applications\n")
+            result.append("Truffaldino - Supported AI Applications\n")
             
             detected_apps = self.config_manager.detect_installed_apps()
             
             for number, app_name, is_installed in detected_apps:
-                status = "✅ Installed" if is_installed else "❌ Not found"
+                status = "[INSTALLED]" if is_installed else "[NOT FOUND]"
                 result.append(f"{number}. {app_name:15} {status}")
             
             return [types.TextContent(type="text", text="\n".join(result))]
@@ -228,7 +248,7 @@ class TruffaldinoMCPServer:
                 return [types.TextContent(type="text", text=f"Invalid app number: {app_number}")]
             
             result = []
-            result.append(f"🔧 MCP Servers for {app.name}\n")
+            result.append(f"MCP Servers for {app.name}\n")
             
             if not app.has_mcp_support:
                 result.append(f"{app.name} does not support MCP servers")
@@ -244,7 +264,7 @@ class TruffaldinoMCPServer:
                 return [types.TextContent(type="text", text="\n".join(result))]
             
             for server_name, config in servers.items():
-                result.append(f"📦 {server_name}")
+                result.append(f"* {server_name}")
                 result.append(f"   Command: {config.get('command', 'N/A')}")
                 if config.get('args'):
                     result.append(f"   Args: {' '.join(config['args'])}")
@@ -279,9 +299,9 @@ class TruffaldinoMCPServer:
             success = self.sync_engine.sync_mcp_servers(from_app, to_app, mode)
             
             if success:
-                result = f"✅ Successfully synced MCP servers from {from_app_obj.name} to {to_app_obj.name}"
+                result = f"[SUCCESS] Synced MCP servers from {from_app_obj.name} to {to_app_obj.name}"
             else:
-                result = f"❌ Failed to sync MCP servers from {from_app_obj.name} to {to_app_obj.name}"
+                result = f"[FAILED] Could not sync MCP servers from {from_app_obj.name} to {to_app_obj.name}"
             
             return [types.TextContent(type="text", text=result)]
         
@@ -296,7 +316,7 @@ class TruffaldinoMCPServer:
                 return [types.TextContent(type="text", text=f"Invalid app number: {app_number}")]
             
             result = []
-            result.append(f"💬 System Prompt for {app.name}\n")
+            result.append(f"System Prompt for {app.name}\n")
             
             if not app.has_prompt_support:
                 result.append(f"{app.name} does not support system prompts")
@@ -308,8 +328,8 @@ class TruffaldinoMCPServer:
                 return [types.TextContent(type="text", text="\n".join(result))]
             
             prompt_content, file_path = prompt_data
-            result.append(f"📁 File: {file_path}")
-            result.append(f"📝 Content ({len(prompt_content)} characters):")
+            result.append(f"File: {file_path}")
+            result.append(f"Content ({len(prompt_content)} characters):")
             result.append("-" * 60)
             result.append(prompt_content)
             result.append("-" * 60)
@@ -334,9 +354,9 @@ class TruffaldinoMCPServer:
             success = self.sync_engine.sync_prompts(from_app, to_app)
             
             if success:
-                result = f"✅ Successfully synced prompts from {from_app_obj.name} to {to_app_obj.name}"
+                result = f"[SUCCESS] Synced prompts from {from_app_obj.name} to {to_app_obj.name}"
             else:
-                result = f"❌ Failed to sync prompts from {from_app_obj.name} to {to_app_obj.name}"
+                result = f"[FAILED] Could not sync prompts from {from_app_obj.name} to {to_app_obj.name}"
             
             return [types.TextContent(type="text", text=result)]
         
@@ -347,26 +367,26 @@ class TruffaldinoMCPServer:
         """Handle status tool call"""
         try:
             result = []
-            result.append("📊 Truffaldino System Status\n")
+            result.append("Truffaldino System Status\n")
             
             # Check Truffaldino directories
             from config import TRUFFALDINO_DIR, VERSIONS_DIR
             
-            result.append(f"📁 Truffaldino directory: {TRUFFALDINO_DIR}")
-            result.append(f"   Exists: {'✅' if TRUFFALDINO_DIR.exists() else '❌'}")
+            result.append(f"Truffaldino directory: {TRUFFALDINO_DIR}")
+            result.append(f"   Exists: {'YES' if TRUFFALDINO_DIR.exists() else 'NO'}")
             
-            result.append(f"📚 Versions directory: {VERSIONS_DIR}")
+            result.append(f"Versions directory: {VERSIONS_DIR}")
             if VERSIONS_DIR.exists():
                 backup_count = len(list(VERSIONS_DIR.iterdir()))
                 result.append(f"   Backups: {backup_count} files")
             else:
-                result.append("   Exists: ❌")
+                result.append("   Exists: NO")
             
             # Check app installations
-            result.append("\n🔍 Detected Applications:")
+            result.append("\nDetected Applications:")
             detected_apps = self.config_manager.detect_installed_apps()
             for number, app_name, is_installed in detected_apps:
-                status = "✅ Installed" if is_installed else "❌ Not found"
+                status = "[INSTALLED]" if is_installed else "[NOT FOUND]"
                 result.append(f"   {app_name}: {status}")
             
             return [types.TextContent(type="text", text="\n".join(result))]
@@ -387,7 +407,7 @@ class TruffaldinoMCPServer:
             editor = os.environ.get('EDITOR', 'vi')
             
             result = []
-            result.append("🔧 Conflict Resolution Required")
+            result.append("Conflict Resolution Required")
             result.append("")
             result.append(f"A conflict file has been created at: {conflict_file}")
             result.append("")
@@ -405,6 +425,48 @@ class TruffaldinoMCPServer:
         
         except Exception as e:
             return [types.TextContent(type="text", text=f"Error handling conflicts: {str(e)}")]
+    
+    async def handle_remove_all_mcps(self, app_number: int) -> List[types.TextContent]:
+        """Handle remove_all_mcps tool call"""
+        try:
+            app = get_app_by_number(app_number)
+            if not app:
+                return [types.TextContent(type="text", text=f"Invalid app number: {app_number}")]
+            
+            result = []
+            result.append(f"Removing all MCP servers from {app.name}\n")
+            
+            if not app.has_mcp_support:
+                result.append(f"{app.name} does not support MCP servers")
+                return [types.TextContent(type="text", text="\n".join(result))]
+            
+            # Check current servers
+            servers = self.config_manager.load_mcp_config(app_number)
+            if servers is None:
+                result.append(f"Failed to load configuration from {app.name}")
+                return [types.TextContent(type="text", text="\n".join(result))]
+            
+            if not servers:
+                result.append("No MCP servers found to remove")
+                return [types.TextContent(type="text", text="\n".join(result))]
+            
+            result.append(f"Found {len(servers)} MCP servers to remove:")
+            for server_name in servers.keys():
+                result.append(f"  - {server_name}")
+            result.append("")
+            
+            # Remove all servers (no confirmation in MCP mode)
+            success = self.sync_engine.remove_all_mcp_servers(app_number)
+            
+            if success:
+                result.append(f"[SUCCESS] Successfully removed all {len(servers)} MCP servers from {app.name}")
+            else:
+                result.append(f"[FAILED] Failed to remove MCP servers from {app.name}")
+            
+            return [types.TextContent(type="text", text="\n".join(result))]
+        
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Error removing MCP servers: {str(e)}")]
     
     async def run(self):
         """Run the MCP server"""

@@ -139,7 +139,7 @@ class TruffaldinoApp:
             print("Error: One or both apps don't support MCP servers")
             return 1
         
-        success = self.sync_engine.sync_mcp_servers(from_app, to_app, mode="smart")
+        success = self.sync_engine.sync_mcp_servers(from_app, to_app)
         return 0 if success else 1
     
     def sync_prompts(self, from_app: int, to_app: int) -> int:

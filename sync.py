@@ -22,6 +22,15 @@ from config import (
 )
 
 
+class ConflictDetectedException(Exception):
+    """Exception raised when conflicts are detected in MCP mode"""
+    
+    def __init__(self, conflict_names: List[str], conflict_data: List[Dict[str, Any]]):
+        self.conflict_names = conflict_names
+        self.conflict_data = conflict_data
+        super().__init__(f"Conflicts detected in: {', '.join(conflict_names)}")
+
+
 class ConfigManager:
     """Manages loading and saving configurations for different AI tools"""
     
@@ -272,10 +281,9 @@ class ConfigManager:
         """Extract Claude Code configuration using CLI"""
         try:
             result = subprocess.run(
-                ["claude", "mcp", "list", "--scope", "user"],
+                ["claude", "mcp", "list"],
                 capture_output=True,
-                text=True,
-                timeout=5
+                text=True
             )
             
             if result.returncode != 0:
@@ -296,7 +304,8 @@ class ConfigManager:
                     }
             
             return servers
-        except Exception:
+        except Exception as e:
+            print(f"Error loading Claude Code config: {e}")
             return None
     
     def _save_claude_code_config(self, mcp_servers: Dict[str, Any]) -> bool:
@@ -317,8 +326,7 @@ class ConfigManager:
                 print(f"Removing duplicate server: {server_name}")
                 result = subprocess.run(
                     ["claude", "mcp", "remove", "--scope", "user", server_name],
-                    capture_output=True,
-                    timeout=5
+                    capture_output=True
                 )
                 if result.returncode != 0:
                     print(f"Warning: Failed to remove duplicate server {server_name}: {result.stderr.decode() if result.stderr else 'Unknown error'}")
@@ -366,7 +374,7 @@ class ConfigManager:
                     print(f"Adding server {server_name} directly (no env vars)")
                     cmd = ["claude", "mcp", "add", "--scope", "user", server_name, command] + clean_args
                 
-                result = subprocess.run(cmd, capture_output=True, timeout=5)
+                result = subprocess.run(cmd, capture_output=True)
                 if result.returncode != 0:
                     error_msg = result.stderr.decode() if result.stderr else 'Unknown error'
                     # Don't fail if server already exists - this is expected in some sync scenarios
@@ -593,13 +601,18 @@ class SyncEngine:
     def __init__(self):
         self.config_manager = ConfigManager()
     
-    def sync_mcp_servers(self, from_app: int, to_app: int, mode: str = "smart") -> bool:
+    def sync_mcp_servers(self, from_app: int, to_app: int, use_mcp_mode: bool = False) -> bool:
         """Sync MCP servers from one app to another
         
         Modes:
         - merge: Add missing servers only
         - replace: Replace all servers
         - smart: Interactive conflict resolution
+        
+        Args:
+            from_app: Source application number
+            to_app: Target application number
+            use_mcp_mode: If True, use MCP tools for conflict resolution instead of CLI input
         """
         # Load source configuration
         source_servers = self.config_manager.load_mcp_config(from_app)
@@ -614,13 +627,7 @@ class SyncEngine:
         # Load target configuration
         target_servers = self.config_manager.load_mcp_config(to_app) or {}
         
-        # Apply sync mode
-        if mode == "replace":
-            merged_servers = source_servers
-        elif mode == "merge":
-            merged_servers = {**target_servers, **source_servers}
-        else:  # smart mode
-            merged_servers = self._smart_merge(source_servers, target_servers)
+        merged_servers = self._smart_merge(source_servers, target_servers, use_mcp_mode)
         
         # Save to target
         success = self.config_manager.save_mcp_config(to_app, merged_servers)
@@ -675,8 +682,7 @@ class SyncEngine:
             for server_name in existing_servers.keys():
                 result = subprocess.run(
                     ["claude", "mcp", "remove", "--scope", "user", server_name],
-                    capture_output=True,
-                    timeout=5
+                    capture_output=True
                 )
                 if result.returncode != 0:
                     error_msg = result.stderr.decode() if result.stderr else 'Unknown error'
@@ -698,8 +704,14 @@ class SyncEngine:
             print(f"Error removing Claude Code servers: {e}")
             return False
     
-    def _smart_merge(self, source: Dict[str, Any], target: Dict[str, Any]) -> Dict[str, Any]:
-        """Smart merge with conflict detection"""
+    def _smart_merge(self, source: Dict[str, Any], target: Dict[str, Any], use_mcp_mode: bool = False) -> Dict[str, Any]:
+        """Smart merge with conflict detection
+        
+        Args:
+            source: Source configuration
+            target: Target configuration  
+            use_mcp_mode: If True, raise exception for MCP handling instead of using CLI input
+        """
         conflicts = []
         merged = target.copy()
         
@@ -712,25 +724,37 @@ class SyncEngine:
                 merged[server_name] = source_config
         
         if conflicts:
-            print(f"\nConflicts detected in: {', '.join(conflicts)}")
-            print("Options:")
-            print("1. Keep target (skip conflicts)")
-            print("2. Use source (overwrite conflicts)")
-            print("3. Review each conflict")
-            
-            choice = input("Choice (1-3): ").strip()
-            
-            if choice == "2":
+            if use_mcp_mode:
+                # In MCP mode, raise a special exception with conflict data
+                conflict_data = []
                 for server_name in conflicts:
-                    merged[server_name] = source[server_name]
-            elif choice == "3":
-                for server_name in conflicts:
-                    print(f"\nConflict in '{server_name}':")
-                    print(f"Source: {json.dumps(source[server_name], indent=2)}")
-                    print(f"Target: {json.dumps(target[server_name], indent=2)}")
-                    use_source = input("Use source? (y/n): ").lower() == 'y'
-                    if use_source:
+                    conflict_data.append({
+                        "server_name": server_name,
+                        "source": source[server_name],
+                        "target": target[server_name]
+                    })
+                raise ConflictDetectedException(conflicts, conflict_data)
+            else:
+                # CLI mode - use input() for interactive resolution
+                print(f"\nConflicts detected in: {', '.join(conflicts)}")
+                print("Options:")
+                print("1. Keep target (skip conflicts)")
+                print("2. Use source (overwrite conflicts)")
+                print("3. Review each conflict")
+                
+                choice = input("Choice (1-3): ").strip()
+                
+                if choice == "2":
+                    for server_name in conflicts:
                         merged[server_name] = source[server_name]
+                elif choice == "3":
+                    for server_name in conflicts:
+                        print(f"\nConflict in '{server_name}':")
+                        print(f"Source: {json.dumps(source[server_name], indent=2)}")
+                        print(f"Target: {json.dumps(target[server_name], indent=2)}")
+                        use_source = input("Use source? (y/n): ").lower() == 'y'
+                        if use_source:
+                            merged[server_name] = source[server_name]
         
         return merged
 

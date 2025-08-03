@@ -22,7 +22,7 @@ except ImportError:
     sys.exit(1)
 
 from config import SUPPORTED_APPS, get_app_by_number, TEMP_CONFLICT_FILE
-from sync import ConfigManager, SyncEngine, ConflictResolver
+from sync import ConfigManager, SyncEngine, ConflictResolver, ConflictDetectedException
 
 
 class TruffaldinoMCPServer:
@@ -180,6 +180,80 @@ class TruffaldinoMCPServer:
                         },
                         "required": ["app_number"]
                     }
+                ),
+                types.Tool(
+                    name="truffaldino_resolve_conflict_keep_target",
+                    description="Resolve all conflicts by keeping target configurations",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "from_app": {
+                                "type": "integer",
+                                "description": "Source application number (1-5)",
+                                "minimum": 1,
+                                "maximum": 5
+                            },
+                            "to_app": {
+                                "type": "integer",
+                                "description": "Target application number (1-5)",
+                                "minimum": 1,
+                                "maximum": 5
+                            }
+                        },
+                        "required": ["from_app", "to_app"]
+                    }
+                ),
+                types.Tool(
+                    name="truffaldino_resolve_conflict_use_source",
+                    description="Resolve all conflicts by using source configurations",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "from_app": {
+                                "type": "integer",
+                                "description": "Source application number (1-5)",
+                                "minimum": 1,
+                                "maximum": 5
+                            },
+                            "to_app": {
+                                "type": "integer",
+                                "description": "Target application number (1-5)",
+                                "minimum": 1,
+                                "maximum": 5
+                            }
+                        },
+                        "required": ["from_app", "to_app"]
+                    }
+                ),
+                types.Tool(
+                    name="truffaldino_resolve_conflict_individual",
+                    description="Resolve conflicts individually by specifying choices for each server",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "from_app": {
+                                "type": "integer",
+                                "description": "Source application number (1-5)",
+                                "minimum": 1,
+                                "maximum": 5
+                            },
+                            "to_app": {
+                                "type": "integer",
+                                "description": "Target application number (1-5)",
+                                "minimum": 1,
+                                "maximum": 5
+                            },
+                            "resolutions": {
+                                "type": "object",
+                                "description": "Map of server names to resolution choices ('source' or 'target')",
+                                "additionalProperties": {
+                                    "type": "string",
+                                    "enum": ["source", "target"]
+                                }
+                            }
+                        },
+                        "required": ["from_app", "to_app", "resolutions"]
+                    }
                 )
             ]
         
@@ -219,6 +293,22 @@ class TruffaldinoMCPServer:
             elif name == "truffaldino_remove_all_mcps":
                 app_number = arguments.get("app_number")
                 return await self.handle_remove_all_mcps(app_number)
+            
+            elif name == "truffaldino_resolve_conflict_keep_target":
+                from_app = arguments.get("from_app")
+                to_app = arguments.get("to_app")
+                return await self.handle_resolve_conflict_keep_target(from_app, to_app)
+            
+            elif name == "truffaldino_resolve_conflict_use_source":
+                from_app = arguments.get("from_app")
+                to_app = arguments.get("to_app")
+                return await self.handle_resolve_conflict_use_source(from_app, to_app)
+            
+            elif name == "truffaldino_resolve_conflict_individual":
+                from_app = arguments.get("from_app")
+                to_app = arguments.get("to_app")
+                resolutions = arguments.get("resolutions", {})
+                return await self.handle_resolve_conflict_individual(from_app, to_app, resolutions)
             
             else:
                 return [types.TextContent(type="text", text=f"Unknown tool: {name}")]
@@ -291,12 +381,8 @@ class TruffaldinoMCPServer:
             if not from_app_obj.has_mcp_support or not to_app_obj.has_mcp_support:
                 return [types.TextContent(type="text", text="One or both apps don't support MCP servers")]
             
-            # For MCP calls, we'll use "replace" mode to avoid interactive prompts
-            # This ensures source overwrites target for a clean sync
-            if mode == "smart":
-                mode = "replace"
-            
-            success = self.sync_engine.sync_mcp_servers(from_app, to_app, mode)
+            # Use MCP mode for conflict resolution
+            success = self.sync_engine.sync_mcp_servers(from_app, to_app, use_mcp_mode=True)
             
             if success:
                 result = f"[SUCCESS] Synced MCP servers from {from_app_obj.name} to {to_app_obj.name}"
@@ -304,6 +390,28 @@ class TruffaldinoMCPServer:
                 result = f"[FAILED] Could not sync MCP servers from {from_app_obj.name} to {to_app_obj.name}"
             
             return [types.TextContent(type="text", text=result)]
+        
+        except ConflictDetectedException as e:
+            # Handle conflicts detected in MCP mode
+            result = []
+            result.append(f"[CONFLICTS DETECTED] Found {len(e.conflict_names)} conflicts during sync:")
+            result.append("")
+            
+            for conflict in e.conflict_data:
+                server_name = conflict["server_name"]
+                result.append(f"• Server: {server_name}")
+                result.append(f"  Source config: {json.dumps(conflict['source'], indent=2)}")
+                result.append(f"  Target config: {json.dumps(conflict['target'], indent=2)}")
+                result.append("")
+            
+            result.append("To resolve conflicts, use one of these MCP tools:")
+            result.append("1. truffaldino_resolve_conflict_keep_target - Keep all target configurations")
+            result.append("2. truffaldino_resolve_conflict_use_source - Use all source configurations")  
+            result.append("3. truffaldino_resolve_conflict_individual - Resolve each conflict individually")
+            result.append("")
+            result.append("After resolving conflicts, retry the sync operation.")
+            
+            return [types.TextContent(type="text", text="\n".join(result))]
         
         except Exception as e:
             return [types.TextContent(type="text", text=f"Error syncing MCP servers: {str(e)}")]
@@ -467,6 +575,126 @@ class TruffaldinoMCPServer:
         
         except Exception as e:
             return [types.TextContent(type="text", text=f"Error removing MCP servers: {str(e)}")]
+    
+    async def handle_resolve_conflict_keep_target(self, from_app: int, to_app: int) -> List[types.TextContent]:
+        """Handle resolving conflicts by keeping all target configurations"""
+        try:
+            from_app_obj = get_app_by_number(from_app)
+            to_app_obj = get_app_by_number(to_app)
+            
+            if not from_app_obj or not to_app_obj:
+                return [types.TextContent(type="text", text="Invalid app numbers")]
+            
+            # Load configurations
+            source_servers = self.config_manager.load_mcp_config(from_app)
+            target_servers = self.config_manager.load_mcp_config(to_app) or {}
+            
+            if source_servers is None:
+                return [types.TextContent(type="text", text=f"Failed to load source configuration from {from_app_obj.name}")]
+            
+            # Merge by keeping target configs for conflicts, adding non-conflicting source configs
+            merged = target_servers.copy()
+            for server_name, source_config in source_servers.items():
+                if server_name not in target_servers:
+                    merged[server_name] = source_config
+            
+            # Save merged configuration
+            success = self.config_manager.save_mcp_config(to_app, merged)
+            
+            if success:
+                result = f"[SUCCESS] Resolved conflicts by keeping target configurations. Synced {len(merged)} MCP servers from {from_app_obj.name} to {to_app_obj.name}"
+            else:
+                result = f"[FAILED] Could not save resolved configuration to {to_app_obj.name}"
+            
+            return [types.TextContent(type="text", text=result)]
+        
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Error resolving conflicts: {str(e)}")]
+    
+    async def handle_resolve_conflict_use_source(self, from_app: int, to_app: int) -> List[types.TextContent]:
+        """Handle resolving conflicts by using all source configurations"""
+        try:
+            from_app_obj = get_app_by_number(from_app)
+            to_app_obj = get_app_by_number(to_app)
+            
+            if not from_app_obj or not to_app_obj:
+                return [types.TextContent(type="text", text="Invalid app numbers")]
+            
+            # Load configurations
+            source_servers = self.config_manager.load_mcp_config(from_app)
+            target_servers = self.config_manager.load_mcp_config(to_app) or {}
+            
+            if source_servers is None:
+                return [types.TextContent(type="text", text=f"Failed to load source configuration from {from_app_obj.name}")]
+            
+            # Merge by using source configs for conflicts, keeping non-conflicting target configs
+            merged = target_servers.copy()
+            for server_name, source_config in source_servers.items():
+                merged[server_name] = source_config  # Always use source config
+            
+            # Save merged configuration
+            success = self.config_manager.save_mcp_config(to_app, merged)
+            
+            if success:
+                result = f"[SUCCESS] Resolved conflicts by using source configurations. Synced {len(merged)} MCP servers from {from_app_obj.name} to {to_app_obj.name}"
+            else:
+                result = f"[FAILED] Could not save resolved configuration to {to_app_obj.name}"
+            
+            return [types.TextContent(type="text", text=result)]
+        
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Error resolving conflicts: {str(e)}")]
+    
+    async def handle_resolve_conflict_individual(self, from_app: int, to_app: int, resolutions: Dict[str, str]) -> List[types.TextContent]:
+        """Handle resolving conflicts individually based on user choices"""
+        try:
+            from_app_obj = get_app_by_number(from_app)
+            to_app_obj = get_app_by_number(to_app)
+            
+            if not from_app_obj or not to_app_obj:
+                return [types.TextContent(type="text", text="Invalid app numbers")]
+            
+            # Load configurations
+            source_servers = self.config_manager.load_mcp_config(from_app)
+            target_servers = self.config_manager.load_mcp_config(to_app) or {}
+            
+            if source_servers is None:
+                return [types.TextContent(type="text", text=f"Failed to load source configuration from {from_app_obj.name}")]
+            
+            # Start with target configuration
+            merged = target_servers.copy()
+            
+            # Apply individual resolutions
+            resolved_count = 0
+            for server_name, choice in resolutions.items():
+                if server_name in source_servers:
+                    if choice == "source":
+                        merged[server_name] = source_servers[server_name]
+                        resolved_count += 1
+                    elif choice == "target":
+                        # Keep existing target config (or skip if not in target)
+                        if server_name not in target_servers:
+                            # If not in target, we need to decide - skip it for now
+                            pass
+                        resolved_count += 1
+            
+            # Add non-conflicting source servers
+            for server_name, source_config in source_servers.items():
+                if server_name not in target_servers and server_name not in resolutions:
+                    merged[server_name] = source_config
+            
+            # Save merged configuration
+            success = self.config_manager.save_mcp_config(to_app, merged)
+            
+            if success:
+                result = f"[SUCCESS] Resolved {resolved_count} conflicts individually. Synced {len(merged)} MCP servers from {from_app_obj.name} to {to_app_obj.name}"
+            else:
+                result = f"[FAILED] Could not save resolved configuration to {to_app_obj.name}"
+            
+            return [types.TextContent(type="text", text=result)]
+        
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Error resolving conflicts: {str(e)}")]
     
     async def run(self):
         """Run the MCP server"""

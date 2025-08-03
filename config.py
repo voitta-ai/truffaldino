@@ -72,17 +72,17 @@ SUPPORTED_APPS = [
         id="cline",
         name="Cline",
         config_paths={
-            "macos": Path.home() / ".cline/mcp_settings.json",
-            "linux": Path.home() / ".cline/mcp_settings.json",
-            "windows": Path.home() / ".cline/mcp_settings.json",
+            "macos": Path.home() / "Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/cline_mcp_settings.json",
+            "linux": Path.home() / ".config/Code/User/globalStorage/saoudrizwan.claude-dev/cline_mcp_settings.json",
+            "windows": Path.home() / "AppData/Roaming/Code/User/globalStorage/saoudrizwan.claude-dev/cline_mcp_settings.json",
         },
         config_format="json",
         has_mcp_support=True,
         has_prompt_support=True,
         prompt_paths={
-            "macos": Path.home() / ".cline/system_prompt.txt",
-            "linux": Path.home() / ".cline/system_prompt.txt",
-            "windows": Path.home() / ".cline/system_prompt.txt",
+            "macos": Path.home() / "Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/system_prompt.txt",
+            "linux": Path.home() / ".config/Code/User/globalStorage/saoudrizwan.claude-dev/system_prompt.txt",
+            "windows": Path.home() / "AppData/Roaming/Code/User/globalStorage/saoudrizwan.claude-dev/system_prompt.txt",
         }
     ),
     AIApp(

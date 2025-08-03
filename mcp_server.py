@@ -271,10 +271,10 @@ class TruffaldinoMCPServer:
             if not from_app_obj.has_mcp_support or not to_app_obj.has_mcp_support:
                 return [types.TextContent(type="text", text="One or both apps don't support MCP servers")]
             
-            # For MCP calls, we'll use "merge" mode to avoid interactive prompts
-            # Conflicts should be handled via the resolve_conflicts tool
+            # For MCP calls, we'll use "replace" mode to avoid interactive prompts
+            # This ensures source overwrites target for a clean sync
             if mode == "smart":
-                mode = "merge"
+                mode = "replace"
             
             success = self.sync_engine.sync_mcp_servers(from_app, to_app, mode)
             

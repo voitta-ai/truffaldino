@@ -41,6 +41,10 @@ class ConfigManager:
             if app.id == "claude_code":
                 # Special case: check if claude CLI is available
                 is_installed = shutil.which("claude") is not None
+            elif app.id == "cline":
+                # Special case: check if Cline config file exists
+                config_path = app.get_config_path()
+                is_installed = config_path and config_path.exists()
             else:
                 # Check if config path exists
                 config_path = app.get_config_path()
@@ -66,6 +70,8 @@ class ConfigManager:
             return self._load_claude_code_config()
         elif app.id == "intellij":
             return self._load_intellij_mcp_config()
+        elif app.id == "cline":
+            return self._load_cline_mcp_config()
         else:
             config_path = app.get_config_path()
             if config_path and config_path.exists():
@@ -92,6 +98,8 @@ class ConfigManager:
             return self._save_claude_code_config(mcp_servers)
         elif app.id == "intellij":
             return self._save_intellij_mcp_config(mcp_servers)
+        elif app.id == "cline":
+            return self._save_cline_mcp_config(mcp_servers)
         else:
             config_path = app.get_config_path()
             if not config_path:
@@ -197,6 +205,59 @@ class ConfigManager:
         
         return None
     
+    def _load_cline_mcp_config(self) -> Optional[Dict[str, Any]]:
+        """Load Cline MCP configuration from JSON file"""
+        cline_app = get_app_by_id("cline")
+        if not cline_app:
+            return None
+        
+        config_path = cline_app.get_config_path()
+        if not config_path or not config_path.exists():
+            return None
+        
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            return config.get("mcpServers", {})
+        except Exception as e:
+            print(f"Error loading Cline config: {e}")
+            return None
+    
+    def _save_cline_mcp_config(self, mcp_servers: Dict[str, Any]) -> bool:
+        """Save Cline MCP configuration to JSON file"""
+        cline_app = get_app_by_id("cline")
+        if not cline_app:
+            return False
+        
+        config_path = cline_app.get_config_path()
+        if not config_path:
+            return False
+        
+        # Ensure directory exists
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Load existing config or create new
+        if config_path.exists():
+            try:
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+            except:
+                config = {}
+        else:
+            config = {}
+        
+        # Update MCP servers
+        config["mcpServers"] = mcp_servers
+        
+        # Save config
+        try:
+            with open(config_path, 'w') as f:
+                json.dump(config, f, indent=2, sort_keys=True)
+            return True
+        except Exception as e:
+            print(f"Error saving Cline config: {e}")
+            return False
+    
     def _cleanup_old_backups(self, app_id: str):
         """Keep only the most recent MAX_VERSIONS_PER_APP backups"""
         pattern = f"{app_id}_*.json" if app_id == "claude_code" else f"{app_id}_*.*"
@@ -244,28 +305,62 @@ class ConfigManager:
             existing = self._load_claude_code_config()
             if existing:
                 for server_name in existing:
-                    subprocess.run(
+                    result = subprocess.run(
                         ["claude", "mcp", "remove", server_name],
                         capture_output=True,
                         timeout=5
                     )
+                    if result.returncode != 0:
+                        print(f"Warning: Failed to remove existing server {server_name}: {result.stderr.decode() if result.stderr else 'Unknown error'}")
             
             # Add new servers
             for server_name, config in mcp_servers.items():
-                cmd = ["claude", "mcp", "add", server_name, config.get("command", "")]
-                args = config.get("args", [])
-                if args:
-                    cmd.extend(args)
+                # Sanitize server name for Claude Code (only letters, numbers, hyphens, underscores)
+                sanitized_name = self._sanitize_server_name(server_name)
                 
-                result = subprocess.run(cmd, capture_output=True, timeout=5)
+                args = config.get("args", [])
+                
+                # Skip servers that use unsupported flags in Claude Code
+                if args and any(arg in ["-m"] for arg in args):
+                    print(f"Skipping {sanitized_name} (from {server_name}) - contains unsupported flags for Claude Code")
+                    continue
+                
+                cmd = ["claude", "mcp", "add", sanitized_name, config.get("command", "")]
+                if args:
+                    # Filter out -y flag which Claude Code doesn't support
+                    filtered_args = [arg for arg in args if arg != "-y"]
+                    cmd.extend(filtered_args)
+                
+                # Add environment variables if present
+                env = os.environ.copy()
+                if config.get("env"):
+                    env.update(config["env"])
+                
+                result = subprocess.run(cmd, capture_output=True, timeout=5, env=env)
                 if result.returncode != 0:
-                    print(f"Failed to add {server_name} to Claude Code")
-                    return False
+                    error_msg = result.stderr.decode() if result.stderr else 'Unknown error'
+                    # Don't fail if server already exists - this is expected in some sync scenarios
+                    if "already exists" in error_msg:
+                        print(f"Warning: {sanitized_name} already exists in Claude Code")
+                    else:
+                        print(f"Failed to add {sanitized_name} (from {server_name}) to Claude Code: {error_msg}")
+                        return False
             
             return True
         except Exception as e:
             print(f"Error updating Claude Code config: {e}")
             return False
+    
+    def _sanitize_server_name(self, name: str) -> str:
+        """Sanitize server name for Claude Code compatibility"""
+        import re
+        # Replace invalid characters with underscores
+        sanitized = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
+        # Remove consecutive underscores
+        sanitized = re.sub(r'_+', '_', sanitized)
+        # Remove leading/trailing underscores
+        sanitized = sanitized.strip('_')
+        return sanitized
     
     def _find_intellij_config_dir(self) -> Optional[Path]:
         """Find the IntelliJ configuration directory"""

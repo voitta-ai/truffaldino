@@ -133,6 +133,12 @@ class TruffaldinoApp:
             print("Error: Invalid app numbers")
             return 1
         
+        # Special case: Claude Desktop (1) -> Claude Code (2)
+        if from_app == 1 and to_app == 2:
+            print("This functionality is obsolete.")
+            print("Use CLI command: claude mcp add-from-claude-desktop")
+            return 0
+        
         print(f"Syncing MCP servers: {from_app_obj.name} -> {to_app_obj.name}\n")
         
         if not from_app_obj.has_mcp_support or not to_app_obj.has_mcp_support:

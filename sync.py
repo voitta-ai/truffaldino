@@ -31,6 +31,15 @@ class ConflictDetectedException(Exception):
         super().__init__(f"Conflicts detected in: {', '.join(conflict_names)}")
 
 
+class ObsoleteFunctionalityException(Exception):
+    """Exception raised when obsolete functionality is accessed in MCP mode"""
+    
+    def __init__(self, message: str, recommendation: str = None):
+        self.message = message
+        self.recommendation = recommendation
+        super().__init__(message)
+
+
 class ConfigManager:
     """Manages loading and saving configurations for different AI tools"""
     
@@ -614,6 +623,19 @@ class SyncEngine:
             to_app: Target application number
             use_mcp_mode: If True, use MCP tools for conflict resolution instead of CLI input
         """
+        # Special case: Claude Desktop (1) -> Claude Code (2)
+        if from_app == 1 and to_app == 2:
+            if use_mcp_mode:
+                # In MCP mode, raise the obsolete functionality exception
+                raise ObsoleteFunctionalityException(
+                    message="This functionality is obsolete.",
+                    recommendation="Use CLI command: claude mcp add-from-claude-desktop"
+                )
+            else:
+                print("This functionality is obsolete.")
+                print("Use CLI command: claude mcp add-from-claude-desktop")
+                return True  # Return True to indicate "success" (handled appropriately)
+        
         # Load source configuration
         source_servers = self.config_manager.load_mcp_config(from_app)
         if source_servers is None:

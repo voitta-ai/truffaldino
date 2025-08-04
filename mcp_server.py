@@ -22,7 +22,7 @@ except ImportError:
     sys.exit(1)
 
 from config import SUPPORTED_APPS, get_app_by_number, TEMP_CONFLICT_FILE
-from sync import ConfigManager, SyncEngine, ConflictResolver, ConflictDetectedException
+from sync import ConfigManager, SyncEngine, ConflictResolver, ConflictDetectedException, ObsoleteFunctionalityException
 
 
 class TruffaldinoMCPServer:
@@ -378,6 +378,10 @@ class TruffaldinoMCPServer:
             if not from_app_obj or not to_app_obj:
                 return [types.TextContent(type="text", text="Invalid app numbers")]
             
+            # Special case: Claude Desktop (1) -> Claude Code (2)
+            if from_app == 1 and to_app == 2:
+                return [types.TextContent(type="text", text="This functionality is obsolete.\nUse CLI command: claude mcp add-from-claude-desktop")]
+            
             if not from_app_obj.has_mcp_support or not to_app_obj.has_mcp_support:
                 return [types.TextContent(type="text", text="One or both apps don't support MCP servers")]
             
@@ -389,6 +393,13 @@ class TruffaldinoMCPServer:
             else:
                 result = f"[FAILED] Could not sync MCP servers from {from_app_obj.name} to {to_app_obj.name}"
             
+            return [types.TextContent(type="text", text=result)]
+        
+        except ObsoleteFunctionalityException as e:
+            # Handle obsolete functionality
+            result = f"{e.message}"
+            if e.recommendation:
+                result += f"\n{e.recommendation}"
             return [types.TextContent(type="text", text=result)]
         
         except ConflictDetectedException as e:

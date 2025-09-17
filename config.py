@@ -114,6 +114,18 @@ SUPPORTED_APPS = [
         has_mcp_support=True,
         has_prompt_support=True,
         prompt_format="text"
+    ),
+    AIApp(
+        id="cline_intellij",
+        name="Cline for IntelliJ",
+        config_paths={
+            "macos": Path.home() / ".cline/data/settings/cline_mcp_settings.json",
+            "linux": Path.home() / ".cline/data/settings/cline_mcp_settings.json",
+            "windows": Path.home() / ".cline/data/settings/cline_mcp_settings.json",
+        },
+        config_format="json",
+        has_mcp_support=True,
+        has_prompt_support=False
     )
 ]
 

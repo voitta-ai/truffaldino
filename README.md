@@ -13,6 +13,7 @@ Truffaldino synchronizes MCP (Model Context Protocol) servers and system prompts
 | 3 | Cline | Yes | Yes | JSON config |
 | 4 | Cursor | Yes | Yes | JSON config |
 | 5 | IntelliJ | Yes | Yes | XML config |
+| 6 | Cline for IntelliJ | Yes | No | JSON config |
 
 ## Installation
 
@@ -164,6 +165,9 @@ Example conflict file:
 - **Windows**: `~/AppData/Roaming/JetBrains/IntelliJIdea*/options/`
 - **Config**: `llm.mcpServers.xml`
 - **Prompts**: `ai_assistant_system_prompt.txt`
+
+### Cline for IntelliJ
+- **All platforms**: `~/.cline/data/settings/cline_mcp_settings.json`
 
 ## Versioning System
 

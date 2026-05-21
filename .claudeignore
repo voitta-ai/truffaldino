@@ -1,48 +1,22 @@
-# Python build & caches
-__pycache__/
-*.py[cod]
-*.egg-info/
-build/
-dist/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-# Virtual envs
+# Dependencies / virtualenvs
+node_modules/
 .venv/
 venv/
 
-# Editor / IDE
+# Build artifacts
+build/
+target/
+dist/
+.gradle/
 .idea/
-.vscode/
 
-# OS
-.DS_Store
+# Generated code
+**/*.pb.go
+**/*_pb2.py
+**/*_pb2_grpc.py
+**/generated/
 
-# Logs
-*.log
-logs/
-
-# Secrets (also enforced via permissions.deny)
-.env
-.env.*
-!.env.example
-configs/truffaldino.json
-configs/generated/
-
-# Personal prompts
-prompts/base-prompt.md
-
-# Backups
-backups/
-
-# Local Claude state
-.claude/settings.local.json
-.claude/sessions/
-.claude/tasks/
-.handoffs/
-
-# Backup files
-*~
-.#*
-\#*
+# Large test fixtures
+**/testdata/
+**/fixtures/
+*.orc
